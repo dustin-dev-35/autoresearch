@@ -26,8 +26,8 @@ from deff import d_eff_from_layers, reference_depth
 
 L = 12
 D = 384
-NS = [1000, 4000, 10000, 20000]
-SEEDS = [11, 22, 33]
+NS = [int(x) for x in os.environ.get("AXV_PRO3_NS", "1000,4000,10000,20000").split(",")]
+SEEDS = [int(x) for x in os.environ.get("AXV_PRO3_SEEDS", "11,22,33").split(",")]
 
 
 def run(L: int, d: int, n: int, seed: int) -> dict:
@@ -70,6 +70,8 @@ def main() -> None:
         out["operating_point_n"] = 10000
         out["operating_point_rel_bias_pct"] = at[0]["rel_bias_pct"]
         out["operating_point_seed_sd_D_eff"] = at[0]["seed_sd_D_eff"]
+    out["operating_point_n_requested"] = 10000
+    out["operating_point_measured"] = bool(at)
     print("AXV_RUN_BEGIN prop3-finite-n-bias")
     print("AXV_METRICS_JSON " + json.dumps(out, sort_keys=True, separators=(",", ":")))
     print("AXV_RUN_END prop3-finite-n-bias status=ok")
