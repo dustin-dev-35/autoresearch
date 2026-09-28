@@ -101,8 +101,15 @@ run_arm () {
   local remain=$(( BUDGET_MIN * 60 - elapsed ))
 
   if [ "$tier" -gt 1 ] && [ "$iters" -gt 0 ]; then
-    # need = training + D_eff measurement, with a 15% margin on the training rate
-    local need=$(( iters * MS_PER_ITER * 115 / 100 + MEASURE_RESERVE_SEC ))
+    # need = training + D_eff measurement, with a 15 percent margin on the
+    # training rate.  MS_PER_ITER is milliseconds per iteration and the budget is
+    # in seconds, so the conversion is /1000.  A previous version of this line
+    # read `iters * MS_PER_ITER * 115 / 100`, which is milliseconds scaled by
+    # 1.15 rather than seconds, and it reported need_sec 793650 against
+    # remaining_sec 856 and skipped three arms that would have fitted with room
+    # to spare.  If the conversion ever looks wrong again, the arithmetic is
+    # checkable from the arm's own logged ms_per_iter.
+    local need=$(( iters * MS_PER_ITER * 115 / 100000 + MEASURE_RESERVE_SEC ))
     if [ "$remain" -lt "$need" ]; then
       echo "AXV_ARM_SKIPPED $rid tier=$tier budget_guard remaining_sec=$remain need_sec=$need ms_per_iter=$MS_PER_ITER"
       return 99
