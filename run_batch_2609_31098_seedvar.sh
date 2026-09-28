@@ -24,6 +24,7 @@ HARNESS_COMMIT="${AXV_HARNESS_COMMIT:?AXV_HARNESS_COMMIT is required}"
 # the remaining envelope, and prints what it has.  A truncated batch that reports
 # its own truncation is worth more than an over-budget batch.
 BUDGET_MIN="${AXV_BUDGET_MINUTES:-75}"
+GUARD_MS_PER_ITER="${AXV_GUARD_MS_PER_ITER:-100}"
 START_EPOCH=$(date +%s)
 WORK=/workspace/axv
 BATCH="${AXV_BATCH:-a2609-31098-seedvar}"
@@ -34,6 +35,9 @@ mkdir -p "$WORK/runs" "$WORK/logs"
 cd "$WORK"
 
 echo "AXV_BATCH_BEGIN $BATCH"
+echo "=== budget ==="
+echo "budget_minutes: $BUDGET_MIN"
+echo "guard_ms_per_iter: $GUARD_MS_PER_ITER"
 echo "=== environment ==="
 date -u +"utc_start: %Y-%m-%dT%H:%M:%SZ"
 echo "harness_commit: $HARNESS_COMMIT"
@@ -56,7 +60,7 @@ git clone --quiet https://github.com/dustin-dev-35/autoresearch.git "$WORK/harne
 cd "$WORK/harness-src"
 git checkout --quiet "$HARNESS_COMMIT" || { echo "AXV_BATCH_ERROR bad commit"; exit 1; }
 echo "harness_resolved_commit: $(git rev-parse HEAD)"
-echo "harness_branch_listing: $(git branch -r --contains HEAD | tr -d ' ' | tr '\n' ',')"
+echo "harness_branch: $(git rev-parse --abbrev-ref HEAD)"
 SHA_DEFF=$(sha256sum deff.py | cut -d' ' -f1)
 SHA_TRAIN=$(sha256sum train.py | cut -d' ' -f1)
 SHA_PROP3=$(sha256sum prop3_check.py | cut -d' ' -f1)
@@ -78,15 +82,14 @@ run_arm () {
   local dir="$WORK/runs/$rid"
   local elapsed=$(( $(date +%s) - START_EPOCH ))
   local remain=$(( BUDGET_MIN * 60 - elapsed ))
-  if [ "$iters" -gt 0 ] && [ "$remain" -lt $(( iters * 45 )) ]; then
-    # 45 s/iter is a deliberately pessimistic Linux estimate: 0.30 s/iter was
-    # measured on Windows and Linux is expected to be far faster.  If even the
-    # pessimistic rate would overrun the envelope, skip rather than overrun.
-    if [ "$required" = "1" ]; then
-      echo "AXV_ARM_SKIPPED $rid budget_guard remaining_sec=$remain need_sec=$(( iters * 45 ))"
-    else
-      echo "AXV_ARM_SKIPPED $rid budget_guard remaining_sec=$remain need_sec=$(( iters * 45 ))"
-    fi
+  if [ "$iters" -gt 0 ] && [ "$remain" -lt $(( iters * GUARD_MS_PER_ITER )) ]; then
+    # 0.10 s/iter is a deliberately conservative Linux estimate for this model on
+    # one PRO 6000 MIG 24GB: 0.29 s/iter was measured on Windows, where PyTorch
+    # small-kernel overhead dominates, and the pod runs Linux on a datacenter
+    # part.  If even the conservative rate would overrun the envelope, skip
+    # rather than overrun.  A batch that reports its own truncation is worth
+    # more than an over-budget batch.
+    echo "AXV_ARM_SKIPPED $rid budget_guard remaining_sec=$remain need_sec=$(( iters * GUARD_MS_PER_ITER / 1000 ))"
     return 99
   fi
   mkdir -p "$dir"
