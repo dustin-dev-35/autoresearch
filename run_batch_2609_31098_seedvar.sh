@@ -25,6 +25,7 @@ HARNESS_COMMIT="${AXV_HARNESS_COMMIT:?AXV_HARNESS_COMMIT is required}"
 # its own truncation is worth more than an over-budget batch.
 BUDGET_MIN="${AXV_BUDGET_MINUTES:-75}"
 GUARD_MS_PER_ITER="${AXV_GUARD_MS_PER_ITER:-100}"
+AXV_HARNESS_BRANCH="${AXV_HARNESS_BRANCH:-experiment/2609.31098-seedvar}"
 START_EPOCH=$(date +%s)
 WORK=/workspace/axv
 BATCH="${AXV_BATCH:-a2609-31098-seedvar}"
@@ -55,9 +56,18 @@ if torch.cuda.is_available():
 PY
 
 echo "=== harness ==="
-git clone --quiet https://github.com/dustin-dev-35/autoresearch.git "$WORK/harness-src" || {
-  echo "AXV_BATCH_ERROR git clone failed"; exit 1; }
-cd "$WORK/harness-src"
+# The entrypoint may have already cloned the fork into place; reuse it if so,
+# otherwise clone the public fork here. No credentials: the fork is public, so
+# no token is ever needed on the pod.
+if [ -d "$WORK/harness-src/.git" ]; then
+  echo "harness_reuse: entrypoint clone"
+  cd "$WORK/harness-src"
+  git fetch --quiet origin "$AXV_HARNESS_BRANCH"
+else
+  git clone --quiet https://github.com/dustin-dev-35/autoresearch.git "$WORK/harness-src" || {
+    echo "AXV_BATCH_ERROR git clone failed"; exit 1; }
+  cd "$WORK/harness-src"
+fi
 git checkout --quiet "$HARNESS_COMMIT" || { echo "AXV_BATCH_ERROR bad commit"; exit 1; }
 echo "harness_resolved_commit: $(git rev-parse HEAD)"
 echo "harness_branch: $(git rev-parse --abbrev-ref HEAD)"
